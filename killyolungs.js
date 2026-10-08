@@ -1,20 +1,11 @@
-var game = new Phaser.Game(480, 640, Phaser.AUTO, null, {
-    preload: preload, create: create, update: update
+var game;
+
+// Create the game once the bundled font is ready, otherwise the texts are drawn with a fallback font.
+document.fonts.load('16px "Press Start 2P"').then(function () {
+    game = new Phaser.Game(480, 640, Phaser.AUTO, null, {
+        preload: preload, create: create, update: update
+    });
 });
-
-WebFontConfig = {
-
-    //  'active' means all requested fonts have finished loading
-    //  We set a 1 second delay before calling 'createText'.
-    //  For some reason if we don't the browser cannot render the text the first time it's created.
-    active: function () { game.time.events.add(Phaser.Timer.SECOND, createText, this); },
-
-    //  The Google Fonts we want to load (specify as many as you like in the array)
-    google: {
-        families: ['Press Start 2P']
-    }
-
-};
 
 var ball;
 var paddle;
@@ -53,8 +44,6 @@ function preload() {
     game.load.image('carcinoma', 'img/carcinoma.png');
     game.load.spritesheet('explosion', 'img/explosion.png', 30, 30);
 
-    game.load.script('webfont', 'https://ajax.googleapis.com/ajax/libs/webfont/1/webfont.js');
-
     game.load.audio('bgm', 'audio/bgm.mp3');
     game.load.audio('sfx:hitWall', 'audio/hitWall.mp3');
     game.load.audio('sfx:hitBrick', 'audio/hitBrick.mp3');
@@ -81,7 +70,6 @@ function create() {
     game.physics.enable(ball, Phaser.Physics.ARCADE);
     ball.body.collideWorldBounds = true;
     ball.body.bounce.set(1);
-    ball.body.velocity.set(150, -200);
     ball.checkWorldBounds = true;
     ball.events.onOutOfBounds.add(ballLeaveScreen, this);
 
@@ -104,6 +92,10 @@ function create() {
     lifeLostText.anchor.set(0.5);
     lifeLostText.visible = false;
 
+    startText = game.add.text(game.world.width * 0.5, game.world.height * 0.75, 'CLICK TO LIGHT UP\nYOUR FIRST CIG', textStyle);
+    startText.anchor.set(0.5);
+    startText.visible = false;
+
     gameOverText = game.add.text(game.world.width * 0.5, game.world.height * 0.75, 'GAME OVER\nCANCER FAILED\n YOUR BODY IS A TEMPLE', textStyle);
     gameOverText.anchor.set(0.5);
     gameOverText.visible = false;
@@ -117,7 +109,6 @@ function create() {
     pauseText.visible = false;
 
     backgroundMusic = game.add.audio('bgm');
-    backgroundMusic.loopFull();
     sfx = {
         hitBrick: game.add.audio('sfx:hitBrick'),
         hitWall: game.add.audio('sfx:hitWall'),
@@ -127,11 +118,20 @@ function create() {
     }
     sfx.hitBrick.allowMultiple = false;
 
+    // Browsers keep audio suspended until the user interacts with the page,
+    // so wait for the sounds to be decoded and for a click before starting.
+    game.sound.setDecodedCallback(['bgm', 'sfx:hitWall', 'sfx:hitBrick', 'sfx:gameover', 'sfx:boom'], function () {
+        startText.visible = true;
+        game.input.onDown.addOnce(startGame, this);
+    }, this);
 
 }
 
-function createText() {
-
+function startGame() {
+    startText.visible = false;
+    game.sound.resumeWebAudioIfSuspended();
+    backgroundMusic.loopFull();
+    ball.body.velocity.set(150, -200);
 }
 
 function update() {
@@ -167,7 +167,7 @@ function update() {
 
     // powerup text
     if (powerUpText.visible == true) {
-        powerUpTextBlinkTimer += game.time.physicsElapsed;
+        powerUpTextBlinkTimer += game.time.delta / 1000;
         if (powerUpTextBlinkTimer >= 0.05) {
             powerUpTextBlinkTimer = 0;
             powerUpTextBlinkI++;
